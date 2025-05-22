@@ -1,6 +1,6 @@
+# https://github.com/nickFridays/RaspberryPi-5__Python/blob/main/BarGraph2.py
 # SN74HC595N shift register   https://www.ti.com/lit/ds/symlink/sn74hc595.pdf
 # for Mikroe BarGraph-2       https://www.mikroe.com/bargraph-2-click
-
 
 from machine import Pin, SPI
 import utime
