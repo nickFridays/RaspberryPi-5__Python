@@ -26,6 +26,12 @@ class BarGraph2:
         sleep(0.1)
         self.mr.value(1)
 
+    def lights_off(self):
+        self.segment_switch(0x00, 0x00, 0x00)
+
+    def power(self, on_off):
+        self.pwm.value(on_off)
+    
     def write_byte(self, data):
         self.cs.value(0)  # Select the device
         self.spi.write(bytearray([data]))
@@ -45,12 +51,6 @@ class BarGraph2:
 
     def led_yellow(self, index):
        
-
-    def lights_off(self):
-        self.segment_switch(0x00, 0x00, 0x00)
-
-    def power(self, on_off):
-        self.pwm.value(on_off)
 
 
 def main():
