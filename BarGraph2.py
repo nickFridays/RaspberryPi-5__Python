@@ -1,6 +1,8 @@
-# https://github.com/nickFridays/RaspberryPi-5__Python/blob/main/BarGraph2.py
+# MIKROE-3021 BarGraph-2   
+# Micropython code for Raspberry Pi Pico 
+# to write a list of bits to 3 daisy chained SN74HC595N shift registers driving 10 LEDs
 # SN74HC595N shift register   https://www.ti.com/lit/ds/symlink/sn74hc595.pdf
-# for Mikroe BarGraph-2       https://www.mikroe.com/bargraph-2-click
+# Mikroe BarGraph-2       https://www.mikroe.com/bargraph-2-click
 
 from machine import Pin, SPI
 import utime
@@ -94,7 +96,6 @@ class BarGraph2:
             sleep(delay)
         self.lights_off()  # optional: turn off after sequence
 
-
     def led_range_all(self, start=1, end=10, color='red', delay=0.2):
         """
         Turns on LEDs in the range [start, end] one by one, so that at the end all LEDs in the range are ON.
@@ -141,16 +142,17 @@ class BarGraph2:
         # Final call ensures all are ON (if not already set in last loop)
         self.segment_switch(reg_3, reg_2, reg_1)
 
-
-# Usage 
+# Usage
 def main():
-    # Blink LED to show the start
+    # Blink LED to signal the MCU start
     led = machine.Pin(25, machine.Pin.OUT) # On-board LED
     for i in range(4):
         sleep(0.1)
         led.value(1)
         sleep(0.1)
-        led.value(0)            
+        led.value(0)
+    sleep(1)
+    
     # Inst BarGraph2 class
     spi = SPI(0, baudrate=100000, polarity=0, phase=0, sck=Pin(18), mosi=Pin(19), miso=Pin(16))
     bargraph = BarGraph2(spi, cs_pin=17, mr_pin=20, pwm_pin=2)
@@ -167,7 +169,7 @@ def main():
     bargraph.led_range_all(start=1, end=10, color='red', delay=0.1)
     bargraph.led_range_all(start=1, end=10, color='yellow', delay=0.1)
     bargraph.led_range_all(start=1, end=10, color='green', delay=0.1)
-     
 
+     
 if __name__ == "__main__":
     main()
