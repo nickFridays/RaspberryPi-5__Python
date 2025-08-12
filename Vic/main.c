@@ -145,143 +145,9 @@ int main()
 	}
     //------------------------------------------------------------------------------------------------
 
-	
-			         
-
-			// Block #@
-			if (reset) {
-				xil_printf("FIXTURE IN OPERATION\n\r");
-			}
-			else xil_printf("FIXTURE IN RESET\n\r");
-			xil_printf("\n\r");
-
-			if (CommandType == DataUpdate) {
-				xil_printf("COMMAND = DATA UPDATE ONLY, can't operate relays\n\r");
-			}
-			else if (CommandType == ChangeRequest) {
-				xil_printf("COMMAND = CHANGE REQUEST\n\r");
-			}
-			xil_printf("\n\r");
-//----------------------------------------------------------------
-
-			if (SHnum == 128 || Synchr != NoSynch) {
-			    SHnum = 0; }
-			else {
-			    SHnum++; }
-			usleep(100000);
-
-
-	//-------------------------------------------------------------------
-
-				switch (recv_char) {
-
-				case '2':  // Set Threshold - write 
-					command = 2;
-					CommandType = ChangeRequest;
-					if (Threshold == Threshold_17V) {
-						Threshold = Threshold_33V;
-					}
-					else if (Threshold == Threshold_33V) {
-						Threshold = Threshold_84V;
-					}
-					else if (Threshold == Threshold_84V) {
-						Threshold = Threshold_166V;
-					}
-					else if (Threshold == Threshold_166V) {
-						Threshold = Threshold_17V;
-					}
-					break;
-
-				case '3':  // Set or Check  Dry Wet
-					command = 3;
-					CommandType = ChangeRequest;
-					if (DryWet == Wet) DryWet = Dry;
-					else DryWet = Wet;
-					break;
-
-				case '4':
-					command = 4;
-					CommandType = ChangeRequest;
-					if (Synchr == NoSynch) Synchr = Sync;
-					else Synchr = NoSynch;
-					break;
-
-				case '5':
-					command = 5;
-					CommandType = DataUpdate;
-					break;
-
-				case '6':
-					command = 6;
-					CommandType = ChangeRequest;
-					break;
-
-				case '7':
-					reset ^= (1 << 0);   // flip the LSB bit
-					XGpio_DiscreteWrite(&output, OUTPUT_CHANNEL, reset);
-					break;
-
-				case '8':
-					XGpio_DiscreteWrite(&output, OUTPUT_CHANNEL, 0x00000000); 	// assert 
-					usleep(100000);			                                    // 100 or 1000 mSec. delay ?
-					XGpio_DiscreteWrite(&output, OUTPUT_CHANNEL, 0x00000001); 	// de-assert 
-					CommandType = CPLDRev;
-					commandCPLD = (CommandType << POS_CommandType) | (ModId << POS_ModId) | (Threshold << POS_Threshold) | (DryWet << POS_DryWet) | (Synchr << POS_Synch);
-					XBram_WriteReg(XPAR_AXI_BRAM_CTRL_0_S_AXI_BASEADDR, 0, commandCPLD);
-					break;
-
-				case 'a':
-					CommandType = ChangeRequest;
-					relayAA = relayAA ^ 1;
-					break;
-
-				case 's':
-					CommandType = ChangeRequest;
-					relayAB = relayAB ^ (1<<1);
-					break;
-
-				case 'd':
-					CommandType = ChangeRequest;
-					relayCA = relayCA ^ (1<<2);
-					break;
-
-				case 'f':
-					CommandType = ChangeRequest;
-					relayCB = relayCB ^ (1<<3);
-					break;
-
-				case 'g':
-					CommandType = ChangeRequest;
-					relayCC = relayCC ^ (1<<4);
-					break;
-
-				case 'z':
-					//CommandType = ChangeRequest;
-					relayAA = 0x00000000;
-					relayAB = 0x00000000;
-					relayCA = 0x00000000;
-					relayCB = 0x00000000;
-					relayCC = 0x00000000;
-					break;
-
-				case 'x':
-					//CommandType = ChangeRequest;
-					relayAA = 0x00000001;
-					relayAB = 0x00000002;
-					relayCA = 0x00000004;
-					relayCB = 0x00000008;
-					relayCC = 0x00000010;
-					break;
-				} // switch ends
-
-			}  // UART receives data ends
-
-			usleep(10000);
-
-		
-		cleanup_platform();
-		xil_printf("The End of forever loop\r\n");
-		return 0;
+	cleanup_platform();
+	xil_printf("The End of forever loop\r\n");
+	return 0;
 
 } // main()
 
@@ -470,5 +336,6 @@ void InitializeECC(XBram_Config *ConfigPtr, u32 EffectiveAddr)
 		XBram_WriteReg(EffectiveAddr, XBRAM_ECC_ON_OFF_OFFSET, 1);
 	}
 }
+
 
 
