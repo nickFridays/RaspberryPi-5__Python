@@ -16,25 +16,12 @@
 #include "sleep.h"
 #include <string.h>
 #include <stdbool.h>
-// Custom headers 
+
+#include "bram_cmd.h"
 #include "uart_cli.h"
-#include "uut_cmd.h"
 
-#define DEBUG true
-
-// HW Constants 
-#define BRAM0_DEVICE_ID		XPAR_BRAM_0_DEVICE_ID
-#define BRAM1_DEVICE_ID		XPAR_BRAM_1_DEVICE_ID
-#define INPUT_CHANNEL 		1
-#define OUTPUT_CHANNEL 	    1
-#define INPUT_DEVICE_ID 	XPAR_AXI_GPIO_INPUT_DEVICE_ID
-#define OUTPUT_DEVICE_ID	XPAR_AXI_GPIO_OUTPUT_DEVICE_ID
-
-#define CMD_READ  = 2; // CLI Command Type Read or Write
-#define CMD_WRITE = 1;
-
-// Vars for HW driver instances 
-XBram Bram0;	// The Instance of the BRAM Driver
+// Vars for HW driver instances
+XBram Bram0;	
 XBram Bram1;	     
 XGpio input;
 XGpio output;
@@ -42,57 +29,44 @@ XUartPs uart;
 XUartPs_Config *config;
 
 // Command blocks structure to build a BRAM command
-CommandBlocks st_cmd_blk;
+CommandBlocks st_frame_bits;
 
 // Local functions 
 int BramExample0(u16 DeviceId);
 int BramExample1(u16 DeviceId);
-static void InitializeECC(XBram_Config *ConfigPtr, u32 EffectiveAddr);
-void InitUart();
+long InitUart();
+void drain_uart_rx_buf(XUartPs *InstancePtr);
 long InitBram_0();
 long InitBram_1();
-void InitInput();
-void InitOutput();
+long InitInput();
+long InitOutput();
 void LedBlink(int blinkNum, int delay_us);
+static void InitializeECC(XBram_Config *ConfigPtr, u32 EffectiveAddr);
 
-
-//------ MAIN() ----------------------------------------------------------------------------------------------
+//------ MAIN() --------------------------------------------------------------------
 
 int main()
 {	
-	unsigned int commandCPLD;
-    unsigned int reset;
-	u32 Data;
-	uint16_t time_cntr=0; // 65,535 mSec max
-	
-
-	(void)command;
-	SHnum    = 0;	// Sample Hold number
-    //----------------------------------------------
-	
-	uint8_t cli_cmd_type = 0;
+	bool Debug = true;
+    u32 reset;
 	char* cli_cmd;
-    
-    u8 recv_char = "";   // UART received char
 	long hw_init = 0;    // HW initialization result
-	//-----------------------------------------------	
 	
 	// Structure to pass into the function cmd_bram_write(CommandBlocks cmd) 
-	CommandBlocks st_cmd_blk = {
-		.CommandType = DataUpdate,     // 0x2
-		.ModId       = Mod_Id,         // 0x3
-		.Threshold   = Threshold_166V, // 0x3
-		.DryWet      = Wet,            // 0x0
-		.Synchr      = NoSync,         // 0x0
-		.relayAA     = 0x00000000,
-		.relayAB     = 0x00000000,
-		.relayCA     = 0x00000000,
-		.relayCB     = 0x00000000,
-		.relayCC     = 0x00000000
+	CommandBlocks st_frame_bits = {
+		.CommandType   = ReadRequest,     // 0x2
+		.ModId         = Mod_Id,                  // 0x3
+		.Threshold     = Threshold_166V,    // 0x3
+		.DryWet        = Wet,                      // 0x0
+		.Synchr        = NoSync,                 // 0x0
+		.relayAA       = 0x00000000,
+		.relayAB       = 0x00000000,
+		.relayCA       = 0x00000000,
+		.relayCB       = 0x00000000,
+		.relayCC       = 0x00000000
 	};
 
-	//-----------------------------------------------
-	// Hardware Driver Initialization
+	// Hardware Drivers Initialization
 	init_platform();
     hw_init |= InitUart();
     hw_init |= InitBram_0(XPAR_BRAM_0_DEVICE_ID);
@@ -101,8 +75,8 @@ int main()
 	hw_init |= InitOutput();
 
 	if (hw_init == 0) {
-		// All functions returned 0
-		xil_printf("\x1B[2J\x1B[H\r\n");
+		// All functions returned 0 - no errors
+        xil_printf("\x1B[2J\x1B[H\r\n");
 		xil_printf("Hardware Init OK\r\n");
 	} else {
 		// At least one function returned 1
@@ -114,39 +88,65 @@ int main()
 
 	reset = 0x00000001;
 
-	xil_printf("UART CLI is ready. Type a command or -help:\n\r");
+	xil_printf("UART CLI is ready. \n\rType CLI Command or -help:\n\r$ ");
 	// Checking user input until entered string matches a CLI command
 	while (1) { 
+
+		// Poll UART to get a valid CLI Command.	
+		cli_cmd = uart_cli_poll(uart, Debug);
+		// Variable to receive command index. -1 is unknown command.
+		s8 cmd_index = -1; 
+		// Get the cli command index to pass for parsing
+		cmd_index = process_uart_cmd(cli_cmd, Debug);
+		// Exit main()
+		if (cmd_index == CMD_EXIT) {
+			break; //while(1)
+		}
+		// Toggle verbose-silent mode
+		if (cmd_index == CMD_DEBUG) {
+			Debug = !Debug;
+			continue;
+		}
+		if (cmd_index == CMD_HELP) {
+			continue;
+		}
+		if (cmd_index==-1) {
+			xil_printf("CLI Error command: %s (index: %d)\n\r", cli_cmd, cmd_index);
+			continue;
+		}
+
 
 		// Reset FPGA
 		XGpio_DiscreteWrite(&output, OUTPUT_CHANNEL, reset);  
 
-		// Poll UART to get a valid CLI Command		
-		char* cli_cmd = uart_cli_poll(uart, true);
+		// Write to BRAM for any CLI Command
+		if (Debug) {xil_printf("BRAM Write for CLI command: %s (index: %d)\n\r", cli_cmd, cmd_index);}
+		// Write to BRAM
+		cmd_bram_write(cli_cmd, st_frame_bits, cmd_index, Debug);
+		usleep(100000);  // 100 mSec.
 		
-		// Check if command is Read or Write
-		cli_cmd_type = process_uart_cmd(command, true);
-		
-		// Check if command is Read or Write
-		u8 cli_cmd_type = process_uart_cmd(command, true);
+		// Read BRAM Data for Read Commands with ? at the end.
+		//if (strchr(cli_cmd, '?') != NULL) {
+		// Reset FPGA
+		//XGpio_DiscreteWrite(&output, OUTPUT_CHANNEL, reset);
 
-		if (cli_cmd_type == CMD_READ) {
-			if (DEBUG) {xil_printf("Executing READ operation for command: %s\n\r", command);}
-			// Read from BRAM
-			cmd_bram_read(cli_cmd);
-			
-		} else if (cli_cmd_type == CMD_WRITE) {
-			if (DEBUG) {xil_printf("Executing WRITE operation for command: %s\n\r", command);}
-			// Write to BRAM 
-			cmd_bram_write(cli_cmd, st_cmd_blk , verbose);
-		}
+		if (Debug) {xil_printf("BRAM Read for CLI command: %s (index: %d)\n\r", cli_cmd, cmd_index);}
+		// Read from BRAM
+		cmd_bram_read(cli_cmd, st_frame_bits, cmd_index, Debug);
+		usleep(100000);  // 100 mSec.
+		//} // if command read ?
 
-		usleep(10000);  // Sleep for 10 ms
-	}
-    //------------------------------------------------------------------------------------------------
+	}	// while(1)
 
+	// Exit
+	//xil_printf("\x1B[2J\x1B[H");
+	xil_printf("\x1B[2J\x1B[H\r\n");
+	//xil_printf("\033[2J\033[H");
+	//xil_printf("\033[2J\033[H\r\n");
+
+	xil_printf("Command: exit. Application has been closed.\r\n");
 	cleanup_platform();
-	xil_printf("The End of forever loop\r\n");
+
 	return 0;
 
 } // main()
@@ -157,7 +157,7 @@ int main()
 //---------------------------------------------------------------------------
 // Initialize UART and set its baud rate
 //---------------------------------------------------------------------------
-void InitUart()
+long InitUart()
 {
 	int Status;
 	config = XUartPs_LookupConfig(XPAR_XUARTPS_0_DEVICE_ID);
@@ -169,13 +169,27 @@ void InitUart()
 	// xil_printf("\x1B[2J\x1B[H\r\n");
 	// Report UART status
 	if (Status == XST_SUCCESS) {
-		   xil_printf(" UART Init was successful\r\n");
+		   xil_printf("UART Init was successful\r\n");
 	   } else {
 		   xil_printf(" UART Init failed with status code: %d\r\n", Status);
-		   return XST_FAILURE
+		   return XST_FAILURE;
 	   }
-	return XST_SUCCESS
+	return XST_SUCCESS;
 }
+
+//---------------------------------------------------------------------------
+//  Empty UART  RX buffer
+//---------------------------------------------------------------------------
+void drain_uart_rx_buffer(XUartPs *InstancePtr) {
+    while (XUartPs_IsReceiveData(InstancePtr->Config.BaseAddress)) {
+        volatile u8 dummy = XUartPs_RecvByte(InstancePtr->Config.BaseAddress);
+        (void)dummy;  // Discard the byte
+    }
+}
+// usage
+// Clear RX buffer to avoid stale data
+//  drain_uart_rx_buffer(&uart);
+
 //---------------------------------------------------------------------------
 // LedBlink(int blinkNum, delay_us)
 //---------------------------------------------------------------------------
@@ -204,7 +218,7 @@ long InitInput()
 	}
 	XGpio_SetDataDirection(&input, INPUT_CHANNEL , 0xF); // 0xF input
 	//xil_printf("XGpio Input Init Successful\r\n");
-	return XST_SUCCESS
+	return XST_SUCCESS;
 }
 //-----------------------------------------------------------------------------
 //  InitOutput()
@@ -220,7 +234,7 @@ long InitOutput()
 	// Configure as outputs
 	XGpio_SetDataDirection(&output, OUTPUT_CHANNEL , 0x0);
 	//xil_printf("XGpio Output Init Successful \r\n");
-	return XST_SUCCESS
+	return XST_SUCCESS;
 }
 //-----------------------------------------------------------------------------
 // InitBram_0()
@@ -336,6 +350,4 @@ void InitializeECC(XBram_Config *ConfigPtr, u32 EffectiveAddr)
 		XBram_WriteReg(EffectiveAddr, XBRAM_ECC_ON_OFF_OFFSET, 1);
 	}
 }
-
-
 
